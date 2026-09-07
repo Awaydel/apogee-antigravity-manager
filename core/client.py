@@ -1,0 +1,222 @@
+import os
+import re
+import ssl
+import json
+import time
+import urllib.request
+import subprocess
+from datetime import datetime, timezone
+
+class LanguageServerClient:
+    def __init__(self, user_agent='Antigravity/2.12.2'):
+        self.user_agent = user_agent
+        self.cache = {'pid': None, 'port': None, 'csrf': None, 'last_checked': 0}
+        self.ssl_ctx = ssl.create_default_context()
+        self.ssl_ctx.check_hostname = False
+        self.ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    def get_connection(self, force_refresh=False):
+        now = time.time()
+        if not force_refresh and (now - self.cache['last_checked'] < 3) and self.cache['port']:
+            return self.cache
+
+        try:
+            ps_cmd = "(Get-CimInstance Win32_Process -Filter \"name = 'language_server.exe'\") | ForEach-Object { [string]::Concat($_.ProcessId, '|', $_.CommandLine) }"
+            out = subprocess.check_output(['powershell', '-NoProfile', '-Command', ps_cmd], timeout=3).decode('utf-8', errors='ignore')
+        except Exception:
+            self.cache.update({'pid': None, 'port': None, 'csrf': None, 'last_checked': now})
+            return self.cache
+
+        pid, csrf, port = None, None, None
+        for line in out.splitlines():
+            if 'language_server' in line:
+                parts = line.split('|', 1)
+                if len(parts) >= 2 and parts[0].strip().isdigit():
+                    pid = int(parts[0].strip())
+                cmd = parts[1] if len(parts) >= 2 else line
+                m_csrf = re.search(r'--csrf_token\s+([0-9a-fA-F\-]+)', cmd)
+                m_port = re.search(r'--https_server_port\s+(\d+)', cmd)
+                if m_csrf:
+                    csrf = m_csrf.group(1).strip()
+                if m_port:
+                    port = int(m_port.group(1).strip())
+                if csrf and port:
+                    break
+
+        self.cache.update({'pid': pid, 'port': port, 'csrf': csrf, 'last_checked': now})
+        return self.cache
+
+    def rpc(self, method, payload=None):
+        payload = payload or {}
+        conn = self.get_connection()
+        port, csrf = conn.get('port'), conn.get('csrf')
+        if not port or not csrf:
+            conn = self.get_connection(force_refresh=True)
+            port, csrf = conn.get('port'), conn.get('csrf')
+            if not port or not csrf:
+                return None
+
+        url = f"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/{method}"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={
+                'Content-Type': 'application/json',
+                'X-Codeium-Csrf-Token': csrf,
+                'User-Agent': self.user_agent
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, context=self.ssl_ctx, timeout=3) as resp:
+                if resp.status == 200:
+                    raw = resp.read()
+                    return json.loads(raw.decode('utf-8')) if raw else {}
+        except Exception:
+            pass
+        return None
+
+    def grpc_web(self, service_method, body=b'{}'):
+        conn = self.get_connection()
+        port, csrf = conn.get('port'), conn.get('csrf')
+        if not port or not csrf:
+            conn = self.get_connection(force_refresh=True)
+            port, csrf = conn.get('port'), conn.get('csrf')
+            if not port or not csrf:
+                return None
+
+        url = f"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/{service_method}"
+        # 1 byte compression flag (0x00) + 4 bytes big-endian length prefix
+        frame = bytearray([0])
+        frame.extend(len(body).to_bytes(4, 'big'))
+        frame.extend(body)
+
+        req = urllib.request.Request(
+            url,
+            data=bytes(frame),
+            headers={
+                'Content-Type': 'application/grpc-web+json',
+                'x-codeium-csrf-token': csrf,
+                'x-grpc-web': '1',
+                'x-user-agent': 'CONNECT_ES_USER_AGENT'
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, context=self.ssl_ctx, timeout=3) as resp:
+                raw = resp.read()
+                if len(raw) >= 5:
+                    msg_len = int.from_bytes(raw[1:5], 'big')
+                    return json.loads(raw[5:5+msg_len].decode('utf-8'))
+        except Exception:
+            pass
+        return None
+
+    def get_user_status(self):
+        return self.rpc("GetUserStatus")
+
+    def get_quota_summary(self):
+        raw = self.grpc_web('RetrieveUserQuotaSummary', b'{}')
+        if not raw or 'response' not in raw:
+            return None
+
+        groups = raw.get('response', {}).get('groups', [])
+        now_utc = datetime.now(timezone.utc)
+
+        def parse_bucket(b):
+            if not b:
+                return None
+            frac = b.get('remainingFraction')
+            pct = round(frac * 100, 1) if frac is not None else 100.0
+            reset_time = b.get('resetTime', '')
+            local_reset = ''
+            rem_secs = 0
+            desc = b.get('description', '')
+            if reset_time:
+                try:
+                    dt = datetime.strptime(reset_time[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+                    rem_secs = max(0, int((dt - now_utc).total_seconds()))
+                    days = int(rem_secs // 86400)
+                    hours = int((rem_secs % 86400) // 3600)
+                    mins = int((rem_secs % 3600) // 60)
+                    if days > 0:
+                        local_reset = dt.astimezone().strftime('%d.%m %H:%M')
+                        if not desc: desc = f"Reset in {days}d {hours}h"
+                    elif hours > 0:
+                        local_reset = dt.astimezone().strftime('%H:%M')
+                        if not desc: desc = f"Reset in {hours}h {mins}m"
+                    else:
+                        local_reset = dt.astimezone().strftime('%H:%M')
+                        if not desc: desc = f"Reset in {mins}m"
+                except Exception:
+                    local_reset = reset_time
+
+            return {
+                'bucketId': b.get('bucketId', ''),
+                'displayName': b.get('displayName', ''),
+                'window': b.get('window', ''),
+                'remainingFraction': frac if frac is not None else 1.0,
+                'percentage': pct,
+                'resetTime': reset_time,
+                'resetTimeLocal': local_reset,
+                'resetSeconds': rem_secs,
+                'description': desc
+            }
+
+        gemini_data = {'weekly': None, 'session5h': None}
+        claude_gpt_data = {'weekly': None, 'session5h': None}
+
+        for g in groups:
+            dname = g.get('displayName', '').lower()
+            buckets = g.get('buckets', [])
+            w_bucket = next((b for b in buckets if b.get('window') == 'weekly'), None)
+            h_bucket = next((b for b in buckets if b.get('window') in ('5h', 'hourly')), None)
+
+            if 'gemini' in dname:
+                gemini_data['weekly'] = parse_bucket(w_bucket)
+                gemini_data['session5h'] = parse_bucket(h_bucket)
+            elif 'claude' in dname or 'gpt' in dname:
+                claude_gpt_data['weekly'] = parse_bucket(w_bucket)
+                claude_gpt_data['session5h'] = parse_bucket(h_bucket)
+
+        return {
+            'gemini': gemini_data,
+            'claudeGpt': claude_gpt_data,
+            'systemDescription': raw.get('response', {}).get('description', '')
+        }
+
+    def get_active_model(self, model_map=None):
+        model_map = model_map or {}
+        try:
+            all_t = self.rpc("GetAllCascadeTrajectories")
+            if all_t and "trajectorySummaries" in all_t:
+                summaries = all_t["trajectorySummaries"]
+                if summaries:
+                    sorted_s = sorted(
+                        summaries.items(),
+                        key=lambda x: x[1].get('lastModifiedTime', '') or x[1].get('createdTime', ''),
+                        reverse=True
+                    )
+                    latest_cid, _ = sorted_s[0]
+                    traj = self.rpc("GetCascadeTrajectory", {"cascadeId": latest_cid})
+                    if traj and "trajectory" in traj:
+                        gm_list = traj["trajectory"].get("generatorMetadata", [])
+                        if gm_list:
+                            last_gm = gm_list[-1]
+                            mid = (
+                                last_gm.get("customMetadata", {}).get("model_enum") or
+                                last_gm.get("chatModel", {}).get("model") or
+                                last_gm.get("responseModel")
+                            )
+                            if mid:
+                                mname = model_map.get(mid)
+                                if not mname and 'flash' in str(mid).lower():
+                                    mname = 'Gemini 3.8 Flash (Medium)'
+                                elif not mname and 'pro' in str(mid).lower():
+                                    mname = 'Gemini 3.1 Pro (High)'
+                                elif not mname and 'claude' in str(mid).lower():
+                                    mname = 'Claude Sonnet 4.6 (Thinking)'
+                                elif not mname:
+                                    mname = str(mid)
+                                return {'rawId': mid, 'name': mname}
+        except Exception:
+            pass
+        return {'rawId': 'MODEL_PLACEHOLDER_M319', 'name': 'Gemini 3.8 Flash (Medium)'}
