@@ -1,43 +1,68 @@
-# apogee-antigravity-manager
+# Apogee — Antigravity Manager
 
-A lightweight local status dashboard and account switcher for Google Antigravity IDE.
+[![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-3b82f6?style=flat-square)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
+[![Dependencies](https://img.shields.io/badge/dependencies-zero%20(stdlib%20only)-10b981?style=flat-square)](pyproject.toml)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-475569?style=flat-square)](server.py)
 
-## Overview
+A lightweight local status dashboard, quota monitor, and multi-account switcher for Google Antigravity IDE.
 
-Antigravity IDE runs a background language server (`language_server.exe`) that enforces rate limits and quota buckets across Gemini and third-party models (Claude, GPT). This dashboard connects to the local RPC service, extracts current quota windows, tracks token consumption per session, and enables fast switching between Google accounts without restarting the IDE.
+---
+
+### The Problem
+
+Google Antigravity runs a local background language server (`language_server.exe`) that mediates all interactions with Gemini and third-party frontier models (Claude Opus/Sonnet, GPT-OSS). Rate limits are enforced on both rolling weekly windows and 5-hour session buckets, but the editor UI provides minimal visibility into exact percentage depletion, reset countdowns, or token burn rates across agent cascades.
+
+**Apogee** runs locally as a companion dashboard with **zero external dependencies** (pure Python standard library). It connects directly to the Language Server's local RPC interface, tracks quota windows, displays per-session token telemetry, and allows hot-switching active models and Google profiles on the fly.
+
+---
 
 ## Screenshots
 
-### Live Quotas & Limits
+### Live Quotas & Sliding Windows
+*Real-time weekly and 5-hour quota pools queried directly from Language Server RPC.*
 ![Dashboard](docs/screenshots/dashboard.png)
 
-### Model Catalog & Switching
+### Model Catalog & Hot-Switching
+*Individual model status, remaining percentages, and one-click active agent model selection.*
 ![Catalog](docs/screenshots/catalog.png)
 
 ### Session Token Telemetry
+*Granular breakdown of prompt, completion, thinking tokens, and cache savings across workspace tasks.*
 ![Telemetry](docs/screenshots/telemetry.png)
+
+---
 
 ## Features
 
-- **Live Quotas**: Queries the local language server for true weekly and 5-hour session quota buckets.
-- **Model Detection**: Inspects active cascade trajectories to display the model currently engaged in your editor session.
-- **Token Telemetry**: Aggregates token usage (prompt, completion, thinking, cached context) across past conversation trajectories with local timestamps.
-- **Account Management**: Integrates with Windows Credential Manager and local storage to switch accounts or authorize new Google profiles via OAuth.
-- **RPC Reset**: Cleanly respawns the language server process if the local RPC connection becomes unresponsive.
-- **Zero Dependencies**: Pure Python standard library implementation (`urllib`, `http.server`, `ctypes`, `json`, `ssl`).
+| Capability | Detail |
+|---|---|
+| **Live Quota Windows** | Queries `RetrieveUserQuotaSummary` and `GetUserStatus` over gRPC-web for exact weekly and 5h limits. |
+| **Model Hot-Switching** | Select any available model (Claude 4.6, GPT-OSS 120B, Gemini 3.8/3.7/3.1) with immediate state file persistence. |
+| **Token Accounting** | Aggregates prompt, completion, reasoning/thinking, and context cache read tokens from conversation trajectories. |
+| **Multi-Account Switching** | Integrates with Windows Credential Manager (`wincred.dll` via `ctypes`) and OAuth to swap Google profiles cleanly. |
+| **RPC Watchdog** | Detects hung language server processes and offers a clean one-click restart without restarting the entire IDE. |
+| **Zero Dependencies** | Implemented strictly with standard library modules (`http.server`, `urllib`, `ctypes`, `json`, `ssl`, `sqlite3`). |
 
-## Prerequisites
-
-- Windows 10/11 (macOS / Linux support for trajectory inspection)
-- Python 3.8+
-- Antigravity IDE (standard installation or portable)
+---
 
 ## Quickstart
 
+### Prerequisites
+- Python 3.8 or higher
+- Antigravity IDE (standard installation or portable)
+- Windows 10/11 (macOS / Linux supported for trajectory inspection)
+
 ### Windows
-Double-click `run.bat` or run from terminal:
+Double-click `run.bat` or run:
 ```cmd
 python server.py
+```
+
+### Linux / macOS
+```bash
+chmod +x run.sh
+./run.sh
 ```
 
 The web dashboard will automatically open at:
@@ -45,15 +70,42 @@ The web dashboard will automatically open at:
 http://127.0.0.1:28888/
 ```
 
-### Options
+### Command Line Options
+
 ```text
 usage: server.py [-h] [--port PORT] [--host HOST] [--no-browser]
 
 options:
   --port PORT     Server port (default: 28888)
   --host HOST     Host address (default: 127.0.0.1)
-  --no-browser    Do not open browser on startup
+  --no-browser    Do not open browser automatically on startup
 ```
+
+---
+
+## Keyboard Shortcuts
+
+The dashboard supports full keyboard navigation for fast multi-tasking:
+
+| Shortcut | Action |
+|---|---|
+| `1` | Switch to **Quotas & Limits** |
+| `2` | Switch to **Model Catalog** |
+| `3` | Switch to **Token Telemetry** |
+| `4` | Switch to **Google Profiles & Settings** |
+| `/` | Focus model search input |
+| `R` | Force refresh all metrics from RPC |
+
+---
+
+## How It Works
+
+1. **Dynamic Port Probing**: Antigravity IDE launches `language_server.exe` with `--https_server_port 0`, causing the OS to bind an ephemeral TCP port. Apogee locates the active process, inspects its listening sockets via `netstat`, and probes candidate ports over HTTPS to resolve the RPC endpoint.
+2. **gRPC-web Protocol**: Communication with the language server uses Connect/gRPC-web with length-prefixed binary frames (`Connect-Protocol-Version: 1`, `X-Codeium-Csrf-Token`).
+3. **Model Selection**: Switching a model updates `last_selected_agent_model` in `antigravity_state.pbtxt` so that subsequent agent sessions and prompts engage the chosen model.
+4. **Credential Storage**: On Windows, access and refresh tokens are managed through the native Credential Manager API (`CredReadW` / `CredWriteW`), keeping credentials secure and isolated.
+
+---
 
 ## Architecture
 
@@ -65,17 +117,20 @@ apogee-antigravity-manager/
 │   ├── accounts.py        # Windows Credential Manager ctypes wrapper & OAuth
 │   └── telemetry.py       # Trajectory parser and token aggregator
 ├── docs/
-│   └── screenshots/       # UI preview captures
+│   └── screenshots/       # High-DPI UI preview captures
 ├── web/
-│   ├── index.html         # Web dashboard markup
-│   ├── css/style.css      # Stylesheet
-│   ├── js/app.js          # Dashboard client logic and I18N
-│   └── assets/            # Vector brand assets
-├── run.bat                # Windows launcher script
-├── run.sh                 # Unix launcher script
-└── pyproject.toml
+│   ├── index.html         # Dashboard markup
+│   ├── css/style.css      # Dark-mode stylesheet
+│   ├── js/app.js          # Client-side state, event handlers & i18n
+│   └── assets/            # Vector logos (Gemini, Claude, OpenAI)
+├── run.bat                # Windows quickstart launcher
+├── run.sh                 # Unix quickstart launcher
+├── requirements.txt       # Development dependencies (optional)
+└── pyproject.toml         # Package metadata and tool configurations
 ```
+
+---
 
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for details.
