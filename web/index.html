@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apogee — Antigravity Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <a href="#" class="brand" onclick="switchTab('quotas', document.querySelectorAll('.tab-btn')[0])">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Apogee</span>
+          <span class="brand-tag">Dashboard</span>
+        </div>
+      </a>
+
+      <div class="status-pill" id="server-status-pill">
+        <span class="dot"></span>
+        <span id="server-status-text">Language Server: Online</span>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('quotas', this)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span data-i18n="nav_quotas">Квоты и Лимиты</span>
+          <kbd>1</kbd>
+        </button>
+        <button class="tab-btn" onclick="switchTab('catalog', this)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span data-i18n="nav_models">Модели</span> (<span id="tab-models-count">14</span>)
+          <kbd>2</kbd>
+        </button>
+        <button class="tab-btn" onclick="switchTab('tokens', this)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span data-i18n="nav_tokens">Расход токенов</span>
+          <kbd>3</kbd>
+        </button>
+        <button class="tab-btn" onclick="switchTab('accounts', this)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span data-i18n="nav_profiles">Профили</span>
+          <kbd>4</kbd>
+        </button>
+      </nav>
+    </div>
+
+    <div class="topbar-right">
+      <div class="lang-toggle" title="Switch Language">
+        <button class="lang-opt active" id="lang-ru" onclick="setLanguage('ru')">RU</button>
+        <button class="lang-opt" id="lang-en" onclick="setLanguage('en')">EN</button>
+      </div>
+
+      <div class="active-model-chip" onclick="switchTab('catalog', document.querySelectorAll('.tab-btn')[1])" title="View in catalog">
+        <img id="topbar-model-icon" src="assets/gemini.svg" alt="Model">
+        <span id="topbar-model-name">Gemini 3.8 Flash (Medium)</span>
+      </div>
+
+      <div class="account-chip" onclick="switchTab('accounts', document.querySelectorAll('.tab-btn')[3])" title="Manage Accounts">
+        <div class="account-chip-avatar" id="topbar-avatar">?</div>
+        <span id="topbar-email">--</span>
+      </div>
+
+      <button class="btn-icon" onclick="refreshAll()" title="Refresh (R)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Quotas Tab -->
+    <div id="tab-quotas" class="tab-pane active">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">
+            <span data-i18n="quotas_title">Квоты и Скоростные Лимиты</span>
+            <span class="badge-count">100% Real-time RPC</span>
+          </h2>
+          <div class="section-subtitle" data-i18n="quotas_subtitle">Прямой опрос Language Server без моков и симуляций</div>
+        </div>
+      </div>
+
+      <div class="hero-grid">
+        <!-- Gemini Card -->
+        <div class="hero-card gemini">
+          <div class="hero-card-header">
+            <div class="hero-brand">
+              <div class="hero-brand-logo">
+                <img src="assets/gemini.svg" alt="Gemini">
+              </div>
+              <div class="hero-brand-info">
+                <h3>Google Gemini Models</h3>
+                <p>Gemini 3.8 Flash, 3.7 Flash, 3.1 Pro</p>
+              </div>
+            </div>
+            <span class="pill-badge safe" id="gemini-status-pill">● <span data-i18n="status_safe">В норме (Safe)</span></span>
+          </div>
+
+          <div class="metric-row">
+            <div class="metric-box">
+              <div class="metric-top">
+                <span class="metric-label" data-i18n="weekly_limit">Недельный лимит</span>
+                <span class="metric-value" id="gemini-w-pct">--%</span>
+              </div>
+              <div class="bar-container">
+                <div class="bar-fill gemini" id="gemini-w-bar" style="width: 0%;"></div>
+              </div>
+              <div class="metric-bottom">
+                <span id="gemini-w-desc">--</span>
+                <span class="countdown" id="gemini-w-timer">--:--:--</span>
+              </div>
+            </div>
+
+            <div class="metric-box">
+              <div class="metric-top">
+                <span class="metric-label" data-i18n="session_limit">Сессионный (5 часов)</span>
+                <span class="metric-value" id="gemini-5-pct">--%</span>
+              </div>
+              <div class="bar-container">
+                <div class="bar-fill gemini" id="gemini-5-bar" style="width: 0%;"></div>
+              </div>
+              <div class="metric-bottom">
+                <span id="gemini-5-desc">--</span>
+                <span class="countdown" id="gemini-5-timer">--:--:--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Claude & OpenAI Card -->
+        <div class="hero-card claude">
+          <div class="hero-card-header">
+            <div class="hero-brand">
+              <div class="hero-brand-logo" style="gap:4px;">
+                <img src="assets/claude.svg" alt="Claude" style="width:22px; height:22px;">
+                <img src="assets/openai.svg" alt="OpenAI" style="width:22px; height:22px;">
+              </div>
+              <div class="hero-brand-info">
+                <h3>Claude & OpenAI Models</h3>
+                <p>Claude Opus 4.6, Claude Sonnet 4.6, GPT-OSS</p>
+              </div>
+            </div>
+            <span class="pill-badge safe" id="claude-status-pill">● <span data-i18n="status_available">100% Доступно</span></span>
+          </div>
+
+          <div class="metric-row">
+            <div class="metric-box">
+              <div class="metric-top">
+                <span class="metric-label" data-i18n="weekly_limit">Недельный лимит</span>
+                <span class="metric-value" id="claude-w-pct">--%</span>
+              </div>
+              <div class="bar-container">
+                <div class="bar-fill claude" id="claude-w-bar" style="width: 0%;"></div>
+              </div>
+              <div class="metric-bottom">
+                <span id="claude-w-desc">--</span>
+                <span class="countdown" id="claude-w-timer">--:--:--</span>
+              </div>
+            </div>
+
+            <div class="metric-box">
+              <div class="metric-top">
+                <span class="metric-label" data-i18n="session_limit">Сессионный (5 часов)</span>
+                <span class="metric-value" id="claude-5-pct">--%</span>
+              </div>
+              <div class="bar-container">
+                <div class="bar-fill claude" id="claude-5-bar" style="width: 0%;"></div>
+              </div>
+              <div class="metric-bottom">
+                <span id="claude-5-desc">--</span>
+                <span class="countdown" id="claude-5-timer">--:--:--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary-tiles">
+        <div class="summary-tile" onclick="switchTab('accounts', document.querySelectorAll('.tab-btn')[3])">
+          <div class="summary-tile-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="summary-tile-content">
+            <div class="summary-tile-label" data-i18n="tile_profile">Активный Google профиль</div>
+            <div class="summary-tile-val" id="tile-email">--</div>
+          </div>
+        </div>
+
+        <div class="summary-tile">
+          <div class="summary-tile-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <div class="summary-tile-content">
+            <div class="summary-tile-label" data-i18n="tile_tier">Тарифный план</div>
+            <div class="summary-tile-val" id="tile-tier">Google AI Pro</div>
+          </div>
+        </div>
+
+        <div class="summary-tile" onclick="switchTab('tokens', document.querySelectorAll('.tab-btn')[2])">
+          <div class="summary-tile-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <div class="summary-tile-content">
+            <div class="summary-tile-label" data-i18n="tile_tokens">Токенов израсходовано</div>
+            <div class="summary-tile-val" id="tile-tokens">--</div>
+          </div>
+        </div>
+
+        <div class="summary-tile" onclick="switchTab('tokens', document.querySelectorAll('.tab-btn')[2])">
+          <div class="summary-tile-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+          </div>
+          <div class="summary-tile-content">
+            <div class="summary-tile-label" data-i18n="tile_cache">Кэшировано (Экономия)</div>
+            <div class="summary-tile-val" id="tile-cache">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Catalog Tab -->
+    <div id="tab-catalog" class="tab-pane">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">
+            <span data-i18n="catalog_title">Каталог Моделей и Переключение</span>
+            <span class="badge-count" id="models-count-badge">14 моделей</span>
+          </h2>
+          <div class="section-subtitle" data-i18n="catalog_subtitle">Мгновенное переключение модели в IDE и индивидуальные скоростные лимиты</div>
+        </div>
+      </div>
+
+      <div class="catalog-controls">
+        <div class="catalog-filters">
+          <button class="filter-chip active" onclick="filterCatalog('all', this)" data-i18n="filter_all">Все модели (14)</button>
+          <button class="filter-chip" onclick="filterCatalog('claude', this)">Anthropic Claude (2)</button>
+          <button class="filter-chip" onclick="filterCatalog('openai', this)">OpenAI (1)</button>
+          <button class="filter-chip" onclick="filterCatalog('gemini', this)">Google Gemini (11)</button>
+          <button class="filter-chip" onclick="filterCatalog('thinking', this)" data-i18n="filter_thinking">Thinking (Рассуждающие)</button>
+        </div>
+
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-models-input" placeholder="Поиск модели по названию (/)..." oninput="onSearchInput(this.value)">
+        </div>
+      </div>
+
+      <div class="models-grid" id="models-container"></div>
+    </div>
+
+    <!-- Telemetry Tab -->
+    <div id="tab-tokens" class="tab-pane">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">
+            <span data-i18n="telemetry_title">Телеметрия Токенов («Кто сожрал лимиты» network)</span>
+            <span class="badge-count" data-i18n="telemetry_badge">Контекст и Вызовы</span>
+          </h2>
+          <div class="section-subtitle" data-i18n="telemetry_subtitle">Точный учет входящих, исходящих токенов, рассуждений и кэша по сессиям</div>
+        </div>
+      </div>
+
+      <div class="telemetry-header-stats">
+        <div class="t-card" onclick="copyValue(appState.tokensReport?.totalTokens, 'Total Tokens')">
+          <div class="t-card-label" data-i18n="stat_total">Всего токенов</div>
+          <div class="t-card-val" id="t-total">--</div>
+        </div>
+        <div class="t-card" onclick="copyValue(appState.tokensReport?.totalInputTokens, 'Input Tokens')">
+          <div class="t-card-label" data-i18n="stat_input">Входящие (Prompt)</div>
+          <div class="t-card-val" id="t-input">--</div>
+        </div>
+        <div class="t-card" onclick="copyValue(appState.tokensReport?.totalOutputTokens, 'Output Tokens')">
+          <div class="t-card-label" data-i18n="stat_output">Исходящие (Output)</div>
+          <div class="t-card-val" id="t-output">--</div>
+        </div>
+        <div class="t-card" onclick="copyValue(appState.tokensReport?.totalThinkingTokens, 'Thinking Tokens')">
+          <div class="t-card-label" data-i18n="stat_thinking">Мышление (Thinking)</div>
+          <div class="t-card-val" id="t-thinking">--</div>
+        </div>
+        <div class="t-card" onclick="copyValue(appState.tokensReport?.totalCacheTokens, 'Cache Tokens')">
+          <div class="t-card-label" data-i18n="stat_cache">Кэш (Context Read)</div>
+          <div class="t-card-val" id="t-cache">--</div>
+        </div>
+        <div class="t-card" onclick="copyValue(appState.tokensReport?.totalCalls, 'API Calls')">
+          <div class="t-card-label" data-i18n="stat_calls">API Вызовов</div>
+          <div class="t-card-val" id="t-calls">--</div>
+        </div>
+      </div>
+
+      <div class="distribution-panel">
+        <div class="dist-title">
+          <span data-i18n="dist_title">Распределение потребления по моделям</span>
+          <span style="font-size:11px; color:var(--text-muted); font-weight:normal;" data-i18n="dist_subtitle">Пропорция токенов</span>
+        </div>
+        <div class="dist-bar" id="dist-bar"></div>
+        <div class="dist-legend" id="dist-legend"></div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="th_task">Диалог / Задача</th>
+              <th data-i18n="th_workspace">Рабочая папка</th>
+              <th data-i18n="th_model">Модель</th>
+              <th data-i18n="th_input">Входные</th>
+              <th data-i18n="th_output">Выходные</th>
+              <th data-i18n="th_thinking">Мышление</th>
+              <th data-i18n="th_cache">Кэш</th>
+              <th data-i18n="th_last_active">Последняя активность</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Profiles & System Tab -->
+    <div id="tab-accounts" class="tab-pane">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title" data-i18n="profiles_title">Профили и Системное Управление</h2>
+          <div class="section-subtitle" data-i18n="profiles_subtitle">Переключение Google аккаунтов, авторизация и перезапуск компонентов</div>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <div class="settings-card">
+          <div class="card-heading">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span data-i18n="accounts_heading">Учетные записи Google</span>
+          </div>
+
+          <div class="account-list" id="accounts-list"></div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn-action-primary" onclick="startOAuth()">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span data-i18n="btn_add_account">Добавить Google Аккаунт</span>
+            </button>
+            <button class="btn-action-secondary" onclick="exportAccounts()">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span data-i18n="btn_export_json">Экспорт JSON</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-heading">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span data-i18n="controls_heading">Управление процессами</span>
+          </div>
+
+          <div class="diagnostic-rows">
+            <div class="diag-item">
+              <span>Language Server PID:</span>
+              <strong class="num-mono" id="diag-ls-pid">--</strong>
+            </div>
+            <div class="diag-item">
+              <span>Language Server RPC Port:</span>
+              <strong class="num-mono" id="diag-ls-port">--</strong>
+            </div>
+            <div class="diag-item">
+              <span data-i18n="ide_status_label">Статус Antigravity IDE:</span>
+              <strong style="color:#34d399;" id="diag-ide-status" data-i18n="status_running">Запущен</strong>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="btn-action-secondary" onclick="restartLanguageServer()">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <span data-i18n="btn_restart_ls">Перезапустить Language Server (Сброс RPC)</span>
+            </button>
+            <button class="btn-action-secondary" onclick="restartIDE()">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span data-i18n="btn_restart_ide">Перезапустить Antigravity IDE</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00f2fe" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    <span id="toast-msg">Уведомление</span>
+  </div>
+
+</body>
+</html>
