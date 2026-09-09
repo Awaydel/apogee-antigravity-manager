@@ -302,7 +302,17 @@ class ApogeeHandler(SimpleHTTPRequestHandler):
             accounts.sync_files(email, target.get('access_token'), target.get('refresh_token'), target.get('expires_at'))
             self.send_json({'success': True})
         elif path == '/api/select_model':
-            self.send_json({'success': True})
+            mid = payload.get('modelId')
+            mname = payload.get('name')
+            if not mid:
+                self.send_json({'success': False, 'error': 'Missing modelId'}, 400)
+                return
+
+            client.set_active_model(mid)
+            db = accounts.load_db()
+            db['active_model'] = {'rawId': mid, 'name': mname}
+            accounts.save_db(db)
+            self.send_json({'success': True, 'modelId': mid, 'name': mname})
         else:
             self.send_response(404)
             self.end_headers()

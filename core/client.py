@@ -226,8 +226,59 @@ class LanguageServerClient:
             'systemDescription': raw.get('response', {}).get('description', '')
         }
 
+    def get_state_file_path(self):
+        candidates = [
+            os.path.join(os.path.dirname(__file__), '..', '..', 'Data', 'home', '.gemini', 'antigravity', 'antigravity_state.pbtxt'),
+            os.path.expandvars(r'%USERPROFILE%\.gemini\antigravity\antigravity_state.pbtxt')
+        ]
+        for p in candidates:
+            p = os.path.abspath(p)
+            if os.path.exists(p):
+                return p
+        return None
+
+    def set_active_model(self, mid):
+        p = self.get_state_file_path()
+        if not p:
+            return False
+        try:
+            with open(p, 'r', encoding='utf-8') as f:
+                text = f.read()
+            if re.search(r'last_selected_agent_model:\s*[A-Za-z0-9_]+', text):
+                new_text = re.sub(r'last_selected_agent_model:\s*[A-Za-z0-9_]+', f'last_selected_agent_model: {mid}', text)
+            else:
+                new_text = text.rstrip() + f'\nlast_selected_agent_model: {mid}\n'
+            with open(p, 'w', encoding='utf-8') as f:
+                f.write(new_text)
+            return True
+        except Exception:
+            return False
+
     def get_active_model(self, model_map=None):
         model_map = model_map or {}
+        p = self.get_state_file_path()
+        if p:
+            try:
+                with open(p, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                m = re.search(r'last_selected_agent_model:\s*([A-Za-z0-9_]+)', content)
+                if m:
+                    raw_id = m.group(1).strip()
+                    mname = model_map.get(raw_id)
+                    if not mname:
+                        low = raw_id.lower()
+                        if 'm35' in low or 'sonnet' in low: mname = 'Claude Sonnet 4.6 (Thinking)'
+                        elif 'm26' in low or 'opus' in low: mname = 'Claude Opus 4.6 (Thinking)'
+                        elif 'gpt' in low or 'oss' in low: mname = 'GPT-OSS 120B (Medium)'
+                        elif 'm16' in low: mname = 'Gemini 3.1 Pro (High)'
+                        elif 'm36' in low: mname = 'Gemini 3.1 Pro (Low)'
+                        elif 'm319' in low: mname = 'Gemini 3.8 Flash (Medium)'
+                        elif 'm318' in low: mname = 'Gemini 3.8 Flash (High)'
+                        else: mname = raw_id
+                    return {'rawId': raw_id, 'name': mname}
+            except Exception:
+                pass
+
         try:
             all_t = self.rpc("GetAllCascadeTrajectories")
             if all_t and "trajectorySummaries" in all_t:
@@ -250,15 +301,7 @@ class LanguageServerClient:
                                 last_gm.get("responseModel")
                             )
                             if mid:
-                                mname = model_map.get(mid)
-                                if not mname and 'flash' in str(mid).lower():
-                                    mname = 'Gemini 3.8 Flash (Medium)'
-                                elif not mname and 'pro' in str(mid).lower():
-                                    mname = 'Gemini 3.1 Pro (High)'
-                                elif not mname and 'claude' in str(mid).lower():
-                                    mname = 'Claude Sonnet 4.6 (Thinking)'
-                                elif not mname:
-                                    mname = str(mid)
+                                mname = model_map.get(mid, str(mid))
                                 return {'rawId': mid, 'name': mname}
         except Exception:
             pass

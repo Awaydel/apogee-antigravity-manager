@@ -492,6 +492,10 @@ function renderCatalog() {
 async function selectModel(mid, mname) {
   const t = I18N[currentLang];
   try {
+    appState.activeModel = { rawId: mid, name: mname };
+    renderTopbar();
+    renderCatalog();
+
     const r = await fetch('/api/select_model', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -503,6 +507,7 @@ async function selectModel(mid, mname) {
       await fetchStatus();
     } else {
       showToast('Error: ' + (res.error || 'Failed'));
+      await fetchStatus();
     }
   } catch (e) {
     showToast('Network error');
