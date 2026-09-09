@@ -1,0 +1,2 @@
+# Apogee uses standard library modules only (urllib, http.server, ctypes, json, ssl).
+# Python 3.8 or higher is required.
