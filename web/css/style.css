@@ -118,6 +118,8 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.25);
   color: #34d399;
   font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .status-pill.offline {
