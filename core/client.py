@@ -256,6 +256,52 @@ class LanguageServerClient:
 
     def get_active_model(self, model_map=None):
         model_map = model_map or {}
+
+        def resolve_name(raw_id):
+            if not raw_id:
+                return 'Gemini 3.8 Flash (Medium)'
+            if raw_id in model_map:
+                return model_map[raw_id]
+            low = raw_id.lower()
+            if 'm35' in low or 'sonnet' in low: return 'Claude Sonnet 4.6 (Thinking)'
+            elif 'm26' in low or 'opus' in low: return 'Claude Opus 4.6 (Thinking)'
+            elif 'gpt' in low or 'oss' in low: return 'GPT-OSS 120B (Medium)'
+            elif 'm16' in low: return 'Gemini 3.1 Pro (High)'
+            elif 'm36' in low: return 'Gemini 3.1 Pro (Low)'
+            elif 'm319' in low: return 'Gemini 3.8 Flash (Medium)'
+            elif 'm318' in low: return 'Gemini 3.8 Flash (High)'
+            elif 'm322' in low: return 'Claude Sonnet 4.6'
+            elif 'm323' in low: return 'Claude Opus 4.6'
+            return raw_id
+
+        # 1. Primary: query live cascade trajectory from Language Server RPC
+        try:
+            all_t = self.rpc("GetAllCascadeTrajectories")
+            if all_t and "trajectorySummaries" in all_t:
+                summaries = all_t["trajectorySummaries"]
+                if summaries:
+                    sorted_s = sorted(
+                        summaries.items(),
+                        key=lambda x: x[1].get('lastModifiedTime', '') or x[1].get('lastUserInputTime', '') or x[1].get('createdTime', ''),
+                        reverse=True
+                    )
+                    latest_cid = sorted_s[0][0]
+                    traj = self.rpc("GetCascadeTrajectory", {"cascadeId": latest_cid})
+                    if traj and "trajectory" in traj:
+                        gm_list = traj["trajectory"].get("generatorMetadata", [])
+                        if gm_list:
+                            for gm in reversed(gm_list):
+                                mid = (
+                                    gm.get("customMetadata", {}).get("model_enum") or
+                                    gm.get("chatModel", {}).get("model") or
+                                    gm.get("responseModel")
+                                )
+                                if mid:
+                                    return {'rawId': mid, 'name': resolve_name(mid)}
+        except Exception:
+            pass
+
+        # 2. Secondary fallback: check antigravity_state.pbtxt
         p = self.get_state_file_path()
         if p:
             try:
@@ -264,45 +310,9 @@ class LanguageServerClient:
                 m = re.search(r'last_selected_agent_model:\s*([A-Za-z0-9_]+)', content)
                 if m:
                     raw_id = m.group(1).strip()
-                    mname = model_map.get(raw_id)
-                    if not mname:
-                        low = raw_id.lower()
-                        if 'm35' in low or 'sonnet' in low: mname = 'Claude Sonnet 4.6 (Thinking)'
-                        elif 'm26' in low or 'opus' in low: mname = 'Claude Opus 4.6 (Thinking)'
-                        elif 'gpt' in low or 'oss' in low: mname = 'GPT-OSS 120B (Medium)'
-                        elif 'm16' in low: mname = 'Gemini 3.1 Pro (High)'
-                        elif 'm36' in low: mname = 'Gemini 3.1 Pro (Low)'
-                        elif 'm319' in low: mname = 'Gemini 3.8 Flash (Medium)'
-                        elif 'm318' in low: mname = 'Gemini 3.8 Flash (High)'
-                        else: mname = raw_id
-                    return {'rawId': raw_id, 'name': mname}
+                    return {'rawId': raw_id, 'name': resolve_name(raw_id)}
             except Exception:
                 pass
 
-        try:
-            all_t = self.rpc("GetAllCascadeTrajectories")
-            if all_t and "trajectorySummaries" in all_t:
-                summaries = all_t["trajectorySummaries"]
-                if summaries:
-                    sorted_s = sorted(
-                        summaries.items(),
-                        key=lambda x: x[1].get('lastModifiedTime', '') or x[1].get('createdTime', ''),
-                        reverse=True
-                    )
-                    latest_cid, _ = sorted_s[0]
-                    traj = self.rpc("GetCascadeTrajectory", {"cascadeId": latest_cid})
-                    if traj and "trajectory" in traj:
-                        gm_list = traj["trajectory"].get("generatorMetadata", [])
-                        if gm_list:
-                            last_gm = gm_list[-1]
-                            mid = (
-                                last_gm.get("customMetadata", {}).get("model_enum") or
-                                last_gm.get("chatModel", {}).get("model") or
-                                last_gm.get("responseModel")
-                            )
-                            if mid:
-                                mname = model_map.get(mid, str(mid))
-                                return {'rawId': mid, 'name': mname}
-        except Exception:
-            pass
         return {'rawId': 'MODEL_PLACEHOLDER_M319', 'name': 'Gemini 3.8 Flash (Medium)'}
+

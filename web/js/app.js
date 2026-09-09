@@ -16,16 +16,17 @@ const I18N = {
     tile_tier: 'Тарифный план',
     tile_tokens: 'Токенов израсходовано',
     tile_cache: 'Кэшировано (Экономия)',
-    catalog_title: 'Каталог Моделей и Переключение',
-    catalog_subtitle: 'Мгновенное переключение модели в IDE и индивидуальные скоростные лимиты',
+    catalog_title: 'Каталог Моделей и Квоты',
+    catalog_subtitle: 'Мониторинг квот моделей и отображение активной сессии в реальном времени',
     filter_all: 'Все модели (14)',
     filter_thinking: 'Thinking (Рассуждающие)',
     search_placeholder: 'Поиск модели по названию (/)...',
     models_count_text: 'моделей',
-    tag_active: 'В работе',
+    tag_active: 'Активна сейчас',
     tag_thinking: 'Thinking',
     btn_current_model: 'Текущая модель',
-    btn_select_model: 'Выбрать',
+    badge_active_session: 'Текущая модель сессии',
+    badge_standby: 'Готова к работе',
     quota_remaining_label: 'Доступный остаток:',
     reset_label: 'Сброс:',
     telemetry_title: 'Телеметрия Токенов («Кто сожрал лимиты»)',
@@ -81,16 +82,17 @@ const I18N = {
     tile_tier: 'Subscription Tier',
     tile_tokens: 'Tokens Burned',
     tile_cache: 'Cached Context (Savings)',
-    catalog_title: 'Model Catalog & Quick Switch',
-    catalog_subtitle: 'Instant active model switching in IDE and granular velocity limits',
+    catalog_title: 'Model Catalog & Quotas',
+    catalog_subtitle: 'Live model quota monitoring and real-time active session tracking',
     filter_all: 'All Models (14)',
     filter_thinking: 'Thinking Models',
     search_placeholder: 'Search model by name (/)...',
     models_count_text: 'models',
-    tag_active: 'Active',
+    tag_active: 'Active Now',
     tag_thinking: 'Thinking',
     btn_current_model: 'Current Model',
-    btn_select_model: 'Select',
+    badge_active_session: 'Active Session Model',
+    badge_standby: 'Ready',
     quota_remaining_label: 'Available remaining:',
     reset_label: 'Reset:',
     telemetry_title: 'Token Telemetry (Resource Burn)',
@@ -478,10 +480,10 @@ function renderCatalog() {
         </div>
 
         <div class="model-card-footer">
-          <span>${t.reset_label} ${m.resetTimeLocal ? m.resetTimeLocal : (currentLang === 'ru' ? 'В норме' : 'Ready')}</span>
+          <span class="model-reset-text">${t.reset_label} ${m.resetTimeLocal ? m.resetTimeLocal : (currentLang === 'ru' ? 'В норме' : 'Ready')}</span>
           ${isActive
-            ? `<button class="btn-select-model is-current">${t.btn_current_model}</button>`
-            : `<button class="btn-select-model" onclick="selectModel('${m.modelId}', '${m.name}')">${t.btn_select_model}</button>`
+            ? `<span class="badge-active-session"><span class="pulse-dot"></span>${t.badge_active_session}</span>`
+            : `<span class="badge-standby-session">${t.badge_standby}</span>`
           }
         </div>
       </div>
