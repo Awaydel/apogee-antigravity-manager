@@ -6,6 +6,17 @@ A lightweight local status dashboard and account switcher for Google Antigravity
 
 Antigravity IDE runs a background language server (`language_server.exe`) that enforces rate limits and quota buckets across Gemini and third-party models (Claude, GPT). This dashboard connects to the local RPC service, extracts current quota windows, tracks token consumption per session, and enables fast switching between Google accounts without restarting the IDE.
 
+## Screenshots
+
+### Live Quotas & Limits
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Model Catalog & Switching
+![Catalog](docs/screenshots/catalog.png)
+
+### Session Token Telemetry
+![Telemetry](docs/screenshots/telemetry.png)
+
 ## Features
 
 - **Live Quotas**: Queries the local language server for true weekly and 5-hour session quota buckets.
@@ -53,6 +64,8 @@ apogee-antigravity-manager/
 │   ├── client.py          # Language Server RPC & gRPC-web protocol client
 │   ├── accounts.py        # Windows Credential Manager ctypes wrapper & OAuth
 │   └── telemetry.py       # Trajectory parser and token aggregator
+├── docs/
+│   └── screenshots/       # UI preview captures
 ├── web/
 │   ├── index.html         # Web dashboard markup
 │   ├── css/style.css      # Stylesheet
