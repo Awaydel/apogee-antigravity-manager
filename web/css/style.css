@@ -516,6 +516,7 @@ body {
 
 .bar-fill.gemini { background: linear-gradient(90deg, #00f2fe, #4facfe, #7000ff); }
 .bar-fill.claude { background: linear-gradient(90deg, #e07a5f, #f59e0b); }
+.bar-fill.openai, .bar-fill.gpt { background: linear-gradient(90deg, #10b981, #059669); }
 .bar-fill.warn { background: linear-gradient(90deg, #f59e0b, #eab308); }
 .bar-fill.danger { background: linear-gradient(90deg, #f43f5e, #dc2626); }
 
