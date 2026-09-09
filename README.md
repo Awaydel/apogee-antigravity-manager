@@ -1,57 +1,121 @@
-# Apogee — Antigravity Manager
-
-[![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-3b82f6?style=flat-square)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![Dependencies](https://img.shields.io/badge/dependencies-zero%20(stdlib%20only)-10b981?style=flat-square)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-475569?style=flat-square)](server.py)
-
-A lightweight local status dashboard, quota monitor, and multi-account switcher for Google Antigravity IDE.
+<p align="center">
+  <br>
+  <pre align="center">
+<b>
+   █████╗ ██████╗  ██████╗  ██████╗ ███████╗███████╗
+  ██╔══██╗██╔══██╗██╔═══██╗██╔════╝ ██╔════╝██╔════╝
+  ███████║██████╔╝██║   ██║██║  ███╗█████╗  █████╗  
+  ██╔══██║██╔═══╝ ██║   ██║██║   ██║██╔══╝  ██╔══╝  
+  ██║  ██║██║     ╚██████╔╝╚██████╔╝███████╗███████╗
+  ╚═╝  ╚═╝╚═╝      ╚═════╝  ╚═════╝ ╚══════╝╚══════╝
+</b>
+  </pre>
+  <h1 align="center">Apogee — Antigravity Manager</h1>
+  <p align="center">
+    <strong>Zero-dependency local dashboard, real-time quota telemetry & multi-account switcher for Google Antigravity IDE.</strong>
+  </p>
+  <p align="center">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-64748b?style=flat-square&labelColor=0f172a" alt="License: MIT"></a>
+    <img src="https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-3b82f6?style=flat-square&labelColor=0f172a&logo=python&logoColor=white" alt="Python 3.8+">
+    <img src="https://img.shields.io/badge/dependencies-zero%20(stdlib%20only)-10b981?style=flat-square&labelColor=0f172a" alt="Zero Dependencies">
+    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-475569?style=flat-square&labelColor=0f172a" alt="Platforms">
+    <img src="https://img.shields.io/badge/telemetry-100%25%20local%20RPC-8b5cf6?style=flat-square&labelColor=0f172a" alt="Local RPC">
+  </p>
+  <p align="center">
+    <a href="#-the-problem">The Problem</a> •
+    <a href="#-screenshots">Screenshots</a> •
+    <a href="#-key-features">Key Features</a> •
+    <a href="#-quickstart">Quickstart</a> •
+    <a href="#-keyboard-shortcuts">Shortcuts</a> •
+    <a href="#-how-it-works">How It Works</a> •
+    <a href="#-architecture">Architecture</a>
+  </p>
+</p>
 
 ---
 
-### The Problem
+## ⚡ The Problem
 
-Google Antigravity runs a local background language server (`language_server.exe`) that mediates all interactions with Gemini and third-party frontier models (Claude Opus/Sonnet, GPT-OSS). Rate limits are enforced on both rolling weekly windows and 5-hour session buckets, but the editor UI provides minimal visibility into exact percentage depletion, reset countdowns, or token burn rates across agent cascades.
+Google Antigravity coordinates language models through a background RPC daemon (`language_server.exe`). Rate limits are enforced on both rolling weekly pools and 5-hour velocity windows across Gemini, Claude (Opus / Sonnet 4.6), and OpenAI (GPT-OSS). 
 
-**Apogee** runs locally as a companion dashboard with **zero external dependencies** (pure Python standard library). It connects directly to the Language Server's local RPC interface, tracks quota windows, displays per-session token telemetry, and allows hot-switching active models and Google profiles on the fly.
+Because the editor interface hides exact remaining percentages and token depletion curves, developers frequently hit rate limits mid-task without warning.
+
+**Apogee** solves this by running as a local, zero-dependency companion:
+1. **True Quota Depletion**: Queries `language_server.exe` via gRPC-web for exact weekly and 5h quota fractions.
+2. **Model Hot-Switching**: Instantly switches the active agent model in `antigravity_state.pbtxt` without restarting the IDE.
+3. **Session Token Accounting**: Parses conversation trajectories to show exact prompt, output, thinking, and cache savings per task.
+4. **Multi-Account Switching**: Interops with Windows Credential Manager (`wincred.dll` via `ctypes`) and OAuth2 to swap Google accounts in seconds.
 
 ---
 
-## Screenshots
+## 📸 Screenshots
 
-### Live Quotas & Sliding Windows
+### 1. Live Quotas & Sliding Windows
 *Real-time weekly and 5-hour quota pools queried directly from Language Server RPC.*
-![Dashboard](docs/screenshots/dashboard.png)
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Apogee Quota Dashboard" width="960" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+</p>
 
-### Model Catalog & Hot-Switching
+### 2. Model Catalog & Hot-Switching
 *Individual model status, remaining percentages, and one-click active agent model selection.*
-![Catalog](docs/screenshots/catalog.png)
+<p align="center">
+  <img src="docs/screenshots/catalog.png" alt="Apogee Model Catalog" width="960" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+</p>
 
-### Session Token Telemetry
+### 3. Session Token Telemetry
 *Granular breakdown of prompt, completion, thinking tokens, and cache savings across workspace tasks.*
-![Telemetry](docs/screenshots/telemetry.png)
+<p align="center">
+  <img src="docs/screenshots/telemetry.png" alt="Apogee Token Telemetry" width="960" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+</p>
 
 ---
 
-## Features
+## ⚡ Key Features
 
-| Capability | Detail |
-|---|---|
-| **Live Quota Windows** | Queries `RetrieveUserQuotaSummary` and `GetUserStatus` over gRPC-web for exact weekly and 5h limits. |
-| **Model Hot-Switching** | Select any available model (Claude 4.6, GPT-OSS 120B, Gemini 3.8/3.7/3.1) with immediate state file persistence. |
-| **Token Accounting** | Aggregates prompt, completion, reasoning/thinking, and context cache read tokens from conversation trajectories. |
-| **Multi-Account Switching** | Integrates with Windows Credential Manager (`wincred.dll` via `ctypes`) and OAuth to swap Google profiles cleanly. |
-| **RPC Watchdog** | Detects hung language server processes and offers a clean one-click restart without restarting the entire IDE. |
-| **Zero Dependencies** | Implemented strictly with standard library modules (`http.server`, `urllib`, `ctypes`, `json`, `ssl`, `sqlite3`). |
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>◈ Live Quota Tracking</h3>
+      <ul>
+        <li><b>Zero Synthetic Data:</b> 100% genuine RPC polling via <code>RetrieveUserQuotaSummary</code>.</li>
+        <li><b>Sliding Windows:</b> Independent weekly & 5-hour rate-limit meters.</li>
+        <li><b>Reset Timers:</b> Live second-by-second countdown to quota replenishment.</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>◈ Model Management</h3>
+      <ul>
+        <li><b>One-Click Selection:</b> Switch active model across Gemini, Claude, and GPT-OSS.</li>
+        <li><b>State Sync:</b> Updates <code>antigravity_state.pbtxt</code> immediately on disk.</li>
+        <li><b>Filter Chips:</b> Instant filtering by provider (Google, Anthropic, OpenAI) or reasoning/thinking.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>◈ Token Accounting</h3>
+      <ul>
+        <li><b>Telemetry Engine:</b> Tracks prompt, output, thinking, and cache reads per conversation.</li>
+        <li><b>Task Attribution:</b> See which workspace task consumed your rate limits.</li>
+        <li><b>Consumption Ratio:</b> Visual breakdown of token usage across models.</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>◈ Security & Multi-Profile</h3>
+      <ul>
+        <li><b>Windows Credential Manager:</b> Native <code>wincred.dll</code> ctypes integration.</li>
+        <li><b>OAuth2 Auth Flow:</b> Connect multiple Google accounts securely.</li>
+        <li><b>RPC Process Watchdog:</b> Clean one-click respawn for unresponsive language server processes.</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
-### Prerequisites
-- Python 3.8 or higher
-- Antigravity IDE (standard installation or portable)
-- Windows 10/11 (macOS / Linux supported for trajectory inspection)
+Apogee requires **zero external pip dependencies** — it runs entirely on the standard Python 3.8+ library.
 
 ### Windows
 Double-click `run.bat` or run:
@@ -70,7 +134,7 @@ The web dashboard will automatically open at:
 http://127.0.0.1:28888/
 ```
 
-### Command Line Options
+### CLI Arguments
 
 ```text
 usage: server.py [-h] [--port PORT] [--host HOST] [--no-browser]
@@ -83,31 +147,31 @@ options:
 
 ---
 
-## Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
-The dashboard supports full keyboard navigation for fast multi-tasking:
+Apogee supports full single-key navigation:
 
-| Shortcut | Action |
-|---|---|
-| `1` | Switch to **Quotas & Limits** |
-| `2` | Switch to **Model Catalog** |
-| `3` | Switch to **Token Telemetry** |
-| `4` | Switch to **Google Profiles & Settings** |
-| `/` | Focus model search input |
-| `R` | Force refresh all metrics from RPC |
-
----
-
-## How It Works
-
-1. **Dynamic Port Probing**: Antigravity IDE launches `language_server.exe` with `--https_server_port 0`, causing the OS to bind an ephemeral TCP port. Apogee locates the active process, inspects its listening sockets via `netstat`, and probes candidate ports over HTTPS to resolve the RPC endpoint.
-2. **gRPC-web Protocol**: Communication with the language server uses Connect/gRPC-web with length-prefixed binary frames (`Connect-Protocol-Version: 1`, `X-Codeium-Csrf-Token`).
-3. **Model Selection**: Switching a model updates `last_selected_agent_model` in `antigravity_state.pbtxt` so that subsequent agent sessions and prompts engage the chosen model.
-4. **Credential Storage**: On Windows, access and refresh tokens are managed through the native Credential Manager API (`CredReadW` / `CredWriteW`), keeping credentials secure and isolated.
+| Key | Action |
+|:---:|:---|
+| `1` | Switch to **Quotas & Velocity Limits** tab |
+| `2` | Switch to **Model Catalog & Switching** tab |
+| `3` | Switch to **Token Telemetry** tab |
+| `4` | Switch to **Google Profiles & Component Controls** tab |
+| `/` | Instant focus into Model Search box |
+| `R` | Force refresh all metrics from Language Server RPC |
 
 ---
 
-## Architecture
+## ⚙️ How It Works
+
+1. **Ephemeral Port Discovery**: Antigravity IDE launches `language_server.exe` with `--https_server_port 0`. Apogee detects the process PID, queries active listening sockets via `netstat`, and validates the HTTPS RPC port automatically.
+2. **gRPC-web Length-Prefixed Unmarshalling**: Apogee speaks native Connect/gRPC-web protocol with 5-byte frame prefixes (`Connect-Protocol-Version: 1`, `X-Codeium-Csrf-Token`).
+3. **Model Selection Persistence**: Selecting a model writes `last_selected_agent_model` to `antigravity_state.pbtxt`, ensuring subsequent agent sessions initialize with the chosen model.
+4. **Credential Isolation**: On Windows, authentication tokens are read and written using Windows Credential Manager (`CredReadW` / `CredWriteW`), avoiding plaintext disk storage.
+
+---
+
+## 🏛️ Architecture
 
 ```text
 apogee-antigravity-manager/
@@ -125,12 +189,13 @@ apogee-antigravity-manager/
 │   └── assets/            # Vector logos (Gemini, Claude, OpenAI)
 ├── run.bat                # Windows quickstart launcher
 ├── run.sh                 # Unix quickstart launcher
-├── requirements.txt       # Development dependencies (optional)
-└── pyproject.toml         # Package metadata and tool configurations
+├── LICENSE                # MIT License
+├── requirements.txt       # Optional dev dependencies
+└── pyproject.toml         # Packaging metadata
 ```
 
 ---
 
-## License
+## 📄 License
 
-MIT License. See [LICENSE](LICENSE) for details.
+Distributed under the [MIT License](LICENSE).
