@@ -149,7 +149,10 @@ class ApogeeHandler(SimpleHTTPRequestHandler):
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path

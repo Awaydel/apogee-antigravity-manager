@@ -17,12 +17,12 @@ class LanguageServerClient:
 
     def get_connection(self, force_refresh=False):
         now = time.time()
-        if not force_refresh and (now - self.cache['last_checked'] < 3) and self.cache['port']:
+        if not force_refresh and (now - self.cache['last_checked'] < 5) and self.cache.get('port') and self.cache.get('csrf'):
             return self.cache
 
         try:
             ps_cmd = "(Get-CimInstance Win32_Process -Filter \"name = 'language_server.exe'\") | ForEach-Object { [string]::Concat($_.ProcessId, '|', $_.CommandLine) }"
-            out = subprocess.check_output(['powershell', '-NoProfile', '-Command', ps_cmd], timeout=3).decode('utf-8', errors='ignore')
+            out = subprocess.check_output(['powershell', '-NoProfile', '-Command', ps_cmd], timeout=4).decode('utf-8', errors='ignore')
         except Exception:
             self.cache.update({'pid': None, 'port': None, 'csrf': None, 'last_checked': now})
             return self.cache
@@ -39,9 +39,30 @@ class LanguageServerClient:
                 if m_csrf:
                     csrf = m_csrf.group(1).strip()
                 if m_port:
-                    port = int(m_port.group(1).strip())
+                    parsed_port = int(m_port.group(1).strip())
+                    if parsed_port > 0:
+                        port = parsed_port
                 if csrf and port:
                     break
+
+        if (not port or port == 0) and pid:
+            try:
+                net_out = subprocess.check_output(f'netstat -ano | findstr {pid}', shell=True, timeout=3).decode('utf-8', errors='ignore')
+                for l in net_out.splitlines():
+                    if 'LISTENING' in l:
+                        parts = l.split()
+                        if len(parts) >= 2 and ':' in parts[1]:
+                            cand = int(parts[1].split(':')[-1])
+                            try:
+                                req = urllib.request.Request(f'https://127.0.0.1:{cand}/', headers={'User-Agent': self.user_agent})
+                                with urllib.request.urlopen(req, context=self.ssl_ctx, timeout=0.4) as resp:
+                                    if resp.status == 200:
+                                        port = cand
+                                        break
+                            except Exception:
+                                pass
+            except Exception:
+                pass
 
         self.cache.update({'pid': pid, 'port': port, 'csrf': csrf, 'last_checked': now})
         return self.cache
@@ -62,6 +83,7 @@ class LanguageServerClient:
             data=json.dumps(payload).encode('utf-8'),
             headers={
                 'Content-Type': 'application/json',
+                'Connect-Protocol-Version': '1',
                 'X-Codeium-Csrf-Token': csrf,
                 'User-Agent': self.user_agent
             }
@@ -72,7 +94,28 @@ class LanguageServerClient:
                     raw = resp.read()
                     return json.loads(raw.decode('utf-8')) if raw else {}
         except Exception:
-            pass
+            conn = self.get_connection(force_refresh=True)
+            port, csrf = conn.get('port'), conn.get('csrf')
+            if not port or not csrf:
+                return None
+            url = f"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/{method}"
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode('utf-8'),
+                headers={
+                    'Content-Type': 'application/json',
+                    'Connect-Protocol-Version': '1',
+                    'X-Codeium-Csrf-Token': csrf,
+                    'User-Agent': self.user_agent
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, context=self.ssl_ctx, timeout=3) as resp:
+                    if resp.status == 200:
+                        raw = resp.read()
+                        return json.loads(raw.decode('utf-8')) if raw else {}
+            except Exception:
+                pass
         return None
 
     def grpc_web(self, service_method, body=b'{}'):

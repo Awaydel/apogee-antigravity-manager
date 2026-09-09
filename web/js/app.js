@@ -267,10 +267,12 @@ function renderTopbar() {
   const ptext = document.getElementById('server-status-text');
   if (appState.lsPort) {
     pill.className = 'status-pill';
-    ptext.textContent = `Language Server: PID ${appState.lsPid}, Port ${appState.lsPort}`;
+    ptext.textContent = `Online (:${appState.lsPort})`;
+    pill.title = `Language Server PID: ${appState.lsPid}, Port: ${appState.lsPort}`;
   } else {
     pill.className = 'status-pill offline';
-    ptext.textContent = 'Language Server: Offline';
+    ptext.textContent = 'Offline';
+    pill.title = 'Language Server is not responding';
   }
 
   if (appState.activeModel) {
@@ -715,6 +717,12 @@ setInterval(() => {
 
 window.addEventListener('DOMContentLoaded', () => {
   setLanguage(currentLang);
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  if (tab) {
+    const btn = document.querySelector(`.tab-btn[onclick*="${tab}"]`);
+    switchTab(tab, btn);
+  }
   fetchStatus();
   fetchTokens();
 });
