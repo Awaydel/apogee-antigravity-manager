@@ -69,6 +69,12 @@ Because the editor interface hides exact remaining percentages and token depleti
   <img src="docs/screenshots/telemetry.png" alt="Apogee Token Telemetry" width="960" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
 </p>
 
+### 4. Profiles & Process Control
+*Multi-account Google switching and Language Server process management.*
+<p align="center">
+  <img src="docs/screenshots/profiles.png" alt="Apogee Profiles" width="960" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+</p>
+
 ---
 
 ## Key Features
@@ -138,12 +144,13 @@ http://127.0.0.1:28888/
 ### CLI Arguments
 
 ```text
-usage: server.py [-h] [--port PORT] [--host HOST] [--no-browser]
+usage: server.py [-h] [--port PORT] [--host HOST] [--no-browser] [--wait-ide]
 
 options:
   --port PORT     Server port (default: 28888)
   --host HOST     Host address (default: 127.0.0.1)
   --no-browser    Do not open browser automatically on startup
+  --wait-ide      Wait for Language Server to be online before opening browser
 ```
 
 ---
@@ -165,7 +172,7 @@ Apogee supports full single-key navigation:
 
 ## How It Works
 
-1. **Ephemeral Port Discovery**: Antigravity IDE launches `language_server.exe` with `--https_server_port 0`. Apogee detects the process PID, queries active listening sockets via `netstat`, and validates the HTTPS RPC port automatically.
+1. **In-Process Port & Process Discovery**: Antigravity IDE launches `language_server.exe` with `--https_server_port 0`. Apogee detects the process, validates the active HTTPS RPC port, and caches the connection via native Win32 process handles (`OpenProcess`) and non-blocking socket probes without spawning console windows.
 2. **gRPC-web Length-Prefixed Unmarshalling**: Apogee communicates with native Connect/gRPC-web protocol using 5-byte frame prefixes (`Connect-Protocol-Version: 1`, `X-Codeium-Csrf-Token`).
 3. **Active Trajectory Inspection**: Queries `GetAllCascadeTrajectories` and `GetCascadeTrajectory` to read generator metadata directly from active sessions, providing accurate model detection at any moment.
 4. **Credential Isolation**: On Windows, authentication tokens are managed via Windows Credential Manager (`CredReadW` / `CredWriteW`), avoiding plaintext disk storage.
