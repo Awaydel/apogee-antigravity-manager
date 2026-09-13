@@ -317,6 +317,15 @@ class ApogeeHandler(SimpleHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+def is_port_in_use(host, port):
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            return s.connect_ex((host, port)) == 0
+    except Exception:
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description='Apogee — Antigravity Language Server Dashboard')
     parser.add_argument('--port', type=int, default=28888, help='Server port (default: 28888)')
@@ -324,8 +333,23 @@ def main():
     parser.add_argument('--no-browser', action='store_true', help='Do not open browser on startup')
     args = parser.parse_args()
 
-    server = ThreadingHTTPServer((args.host, args.port), ApogeeHandler)
     url = f'http://{args.host}:{args.port}/'
+
+    # If server is already running on this port, open browser and exit cleanly
+    if is_port_in_use(args.host, args.port):
+        print(f'Apogee server is already active at {url}')
+        if not args.no_browser:
+            webbrowser.open(url)
+        return
+
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), ApogeeHandler)
+    except OSError:
+        # Fallback if port just became busy
+        if not args.no_browser:
+            webbrowser.open(url)
+        return
+
     print(f'Apogee server running at {url}')
 
     if not args.no_browser:
