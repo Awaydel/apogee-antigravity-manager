@@ -55,67 +55,85 @@ def start_ide():
     return False
 
 def get_live_status():
-    status_resp = client.get_user_status()
-    quota_summary = client.get_quota_summary()
-
     buckets = []
     model_map = {}
     tier_name = 'Google AI Pro'
     user_avatar = ''
+    quota_summary = None
+
+    try:
+        status_resp = client.get_user_status()
+    except Exception:
+        status_resp = None
+
+    try:
+        quota_summary = client.get_quota_summary()
+    except Exception:
+        quota_summary = None
 
     if status_resp and 'userStatus' in status_resp:
-        us = status_resp['userStatus']
-        tier_name = us.get('userTier', {}).get('name') or 'Google AI Pro'
-        user_avatar = us.get('profilePictureUrl') or ''
-        configs = us.get('cascadeModelConfigData', {}).get('clientModelConfigs', [])
-        now_utc = datetime.now(timezone.utc)
+        try:
+            us = status_resp['userStatus']
+            tier_name = us.get('userTier', {}).get('name') or 'Google AI Pro'
+            user_avatar = us.get('profilePictureUrl') or ''
+            configs = us.get('cascadeModelConfigData', {}).get('clientModelConfigs', [])
+            now_utc = datetime.now(timezone.utc)
 
-        for c in configs:
-            label = c.get('label', '')
-            raw_mid = c.get('modelOrAlias', {}).get('model', '')
-            if raw_mid:
-                model_map[raw_mid] = label
+            for c in configs:
+                label = c.get('label', '')
+                raw_mid = c.get('modelOrAlias', {}).get('model', '')
+                if raw_mid:
+                    model_map[raw_mid] = label
 
-            q = c.get('quotaInfo', {})
-            frac = q.get('remainingFraction')
-            pct = round(frac * 100, 1) if frac is not None else 100.0
-            reset_time = q.get('resetTime', '')
-            local_reset = ''
-            if reset_time:
-                try:
-                    dt = datetime.strptime(reset_time[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc)
-                    local_reset = dt.astimezone().strftime('%H:%M')
-                except Exception:
-                    local_reset = reset_time
+                q = c.get('quotaInfo', {})
+                frac = q.get('remainingFraction')
+                pct = round(frac * 100, 1) if frac is not None else 100.0
+                reset_time = q.get('resetTime', '')
+                local_reset = ''
+                if reset_time:
+                    try:
+                        dt = datetime.strptime(reset_time[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+                        local_reset = dt.astimezone().strftime('%H:%M')
+                    except Exception:
+                        local_reset = reset_time
 
-            low = label.lower()
-            if 'claude' in low:
-                brand, provider, icon, group_key = 'claude', 'Anthropic', 'assets/claude.svg', 'claudeGpt'
-            elif 'gpt' in low:
-                brand, provider, icon, group_key = 'openai', 'OpenAI', 'assets/openai.svg', 'claudeGpt'
-            else:
-                brand, provider, icon, group_key = 'gemini', 'Google', 'assets/gemini.svg', 'gemini'
+                low = label.lower()
+                if 'claude' in low:
+                    brand, provider, icon, group_key = 'claude', 'Anthropic', 'assets/claude.svg', 'claudeGpt'
+                elif 'gpt' in low:
+                    brand, provider, icon, group_key = 'openai', 'OpenAI', 'assets/openai.svg', 'claudeGpt'
+                else:
+                    brand, provider, icon, group_key = 'gemini', 'Google', 'assets/gemini.svg', 'gemini'
 
-            buckets.append({
-                'modelId': raw_mid,
-                'name': label,
-                'provider': provider,
-                'brand': brand,
-                'icon': icon,
-                'groupKey': group_key,
-                'percentage': pct,
-                'remainingFraction': frac,
-                'resetTime': reset_time,
-                'resetTimeLocal': local_reset,
-                'isPremium': 'claude' in low or 'gpt' in low,
-                'isThinking': 'thinking' in low,
-                'isRecommended': c.get('isRecommended', False)
-            })
+                buckets.append({
+                    'modelId': raw_mid,
+                    'name': label,
+                    'provider': provider,
+                    'brand': brand,
+                    'icon': icon,
+                    'groupKey': group_key,
+                    'percentage': pct,
+                    'remainingFraction': frac,
+                    'resetTime': reset_time,
+                    'resetTimeLocal': local_reset,
+                    'isPremium': 'claude' in low or 'gpt' in low,
+                    'isThinking': 'thinking' in low,
+                    'isRecommended': c.get('isRecommended', False)
+                })
 
-        buckets.sort(key=lambda x: (0 if x['brand'] == 'claude' else (1 if x['brand'] == 'openai' else 2), x['name']))
+            buckets.sort(key=lambda x: (0 if x['brand'] == 'claude' else (1 if x['brand'] == 'openai' else 2), x['name']))
+        except Exception:
+            pass
 
-    active_model = client.get_active_model(model_map)
-    conn = client.get_connection()
+    try:
+        active_model = client.get_active_model(model_map)
+    except Exception:
+        active_model = {'rawId': 'MODEL_PLACEHOLDER_M318', 'name': 'Gemini 3.8 Flash (High)'}
+
+    try:
+        conn = client.get_connection()
+    except Exception:
+        conn = {}
 
     return {
         'tier': tier_name,
@@ -137,6 +155,7 @@ class ApogeeHandler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Connection', 'close')
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -326,11 +345,37 @@ def is_port_in_use(host, port):
     except Exception:
         return False
 
+import threading
+
+def wait_for_ide_and_open_browser(url, timeout=90):
+    def _worker():
+        start_time = time.time()
+        print('Waiting for Language Server to come online before opening browser...')
+        while time.time() - start_time < timeout:
+            try:
+                conn = client.get_connection(force_refresh=True)
+                if conn.get('port') and conn.get('csrf'):
+                    st = client.get_user_status()
+                    if st:
+                        print(f'Language Server is online on port {conn["port"]}! Opening dashboard...')
+                        time.sleep(1.2)
+                        webbrowser.open(url)
+                        return
+            except Exception:
+                pass
+            time.sleep(1.5)
+        print('Language Server wait timeout reached, opening dashboard anyway...')
+        webbrowser.open(url)
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
 def main():
     parser = argparse.ArgumentParser(description='Apogee — Antigravity Language Server Dashboard')
     parser.add_argument('--port', type=int, default=28888, help='Server port (default: 28888)')
     parser.add_argument('--host', default='127.0.0.1', help='Host address (default: 127.0.0.1)')
     parser.add_argument('--no-browser', action='store_true', help='Do not open browser on startup')
+    parser.add_argument('--wait-ide', action='store_true', help='Wait for Language Server to come online before opening browser')
     args = parser.parse_args()
 
     url = f'http://{args.host}:{args.port}/'
@@ -352,7 +397,9 @@ def main():
 
     print(f'Apogee server running at {url}')
 
-    if not args.no_browser:
+    if args.wait_ide:
+        wait_for_ide_and_open_browser(url)
+    elif not args.no_browser:
         webbrowser.open(url)
 
     try:

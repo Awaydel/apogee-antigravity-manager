@@ -242,9 +242,15 @@ async function fetchStatus() {
     renderHeroQuotas();
     renderCatalog();
     renderAccounts();
+
+    // If language server is not yet online, retry quickly in 2 seconds
+    if (!data.lsPort) {
+      setTimeout(fetchStatus, 2000);
+    }
   } catch (e) {
     document.getElementById('server-status-pill').className = 'status-pill offline';
     document.getElementById('server-status-text').textContent = 'Language Server: Offline';
+    setTimeout(fetchStatus, 2000);
   }
 }
 
