@@ -1,6 +1,10 @@
-#!/usr/bin/env python3
 import os
 import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 import json
 import time
 import argparse
@@ -14,7 +18,7 @@ from core.client import LanguageServerClient
 from core.accounts import AccountManager
 from core.telemetry import TelemetryTracker
 
-WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
+WEB_DIR = os.path.join(BASE_DIR, 'web')
 
 client = LanguageServerClient()
 accounts = AccountManager()
@@ -22,8 +26,8 @@ telemetry = TelemetryTracker(client)
 
 def is_ide_running():
     try:
-        out = subprocess.check_output('tasklist /FI "IMAGENAME eq Antigravity.exe" /NH', shell=True).decode('utf-8', errors='ignore')
-        return 'Antigravity.exe' in out
+        out = subprocess.check_output('tasklist /FI "IMAGENAME eq Antigravity*" /NH', shell=True).decode('utf-8', errors='ignore')
+        return 'Antigravity' in out
     except Exception:
         return False
 
@@ -149,6 +153,13 @@ def get_live_status():
 class ApogeeHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WEB_DIR, **kwargs)
+
+    def log_message(self, format, *args):
+        if sys.stderr is not None:
+            try:
+                sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), format % args))
+            except Exception:
+                pass
 
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -350,21 +361,26 @@ import threading
 def wait_for_ide_and_open_browser(url, timeout=90):
     def _worker():
         start_time = time.time()
-        print('Waiting for Language Server to come online before opening browser...')
+        # 1. Wait until Antigravity IDE process appears
+        while time.time() - start_time < timeout:
+            if is_ide_running():
+                break
+            time.sleep(1.0)
+
+        # 2. Wait until Language Server RPC is responsive
         while time.time() - start_time < timeout:
             try:
                 conn = client.get_connection(force_refresh=True)
                 if conn.get('port') and conn.get('csrf'):
                     st = client.get_user_status()
                     if st:
-                        print(f'Language Server is online on port {conn["port"]}! Opening dashboard...')
-                        time.sleep(1.2)
+                        time.sleep(2.5)
                         webbrowser.open(url)
                         return
             except Exception:
                 pass
             time.sleep(1.5)
-        print('Language Server wait timeout reached, opening dashboard anyway...')
+
         webbrowser.open(url)
 
     t = threading.Thread(target=_worker, daemon=True)
@@ -380,22 +396,34 @@ def main():
 
     url = f'http://{args.host}:{args.port}/'
 
-    # If server is already running on this port, open browser and exit cleanly
+    # If server is already running on this port, handle wait-ide or open browser and exit cleanly
     if is_port_in_use(args.host, args.port):
-        print(f'Apogee server is already active at {url}')
         if not args.no_browser:
-            webbrowser.open(url)
+            if args.wait_ide:
+                start_time = time.time()
+                while time.time() - start_time < 60:
+                    try:
+                        conn = client.get_connection(force_refresh=True)
+                        if conn.get('port') and conn.get('csrf'):
+                            st = client.get_user_status()
+                            if st:
+                                time.sleep(2.5)
+                                webbrowser.open(url)
+                                return
+                    except Exception:
+                        pass
+                    time.sleep(1.5)
+                webbrowser.open(url)
+            else:
+                webbrowser.open(url)
         return
 
     try:
         server = ThreadingHTTPServer((args.host, args.port), ApogeeHandler)
     except OSError:
-        # Fallback if port just became busy
         if not args.no_browser:
             webbrowser.open(url)
         return
-
-    print(f'Apogee server running at {url}')
 
     if args.wait_ide:
         wait_for_ide_and_open_browser(url)
@@ -405,8 +433,15 @@ def main():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print('\nShutting down...')
         server.server_close()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        try:
+            with open(os.path.join(BASE_DIR, 'crash.log'), 'w', encoding='utf-8') as f:
+                traceback.print_exc(file=f)
+        except Exception:
+            pass
