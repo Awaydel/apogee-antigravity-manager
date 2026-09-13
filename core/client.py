@@ -1,11 +1,24 @@
 import os
 import re
 import ssl
+import sys
 import json
 import time
+import socket
+import ctypes
 import urllib.request
 import subprocess
 from datetime import datetime, timezone
+
+def silent_subprocess_kwargs():
+    kwargs = {}
+    if sys.platform == 'win32':
+        kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0  # SW_HIDE
+        kwargs['startupinfo'] = si
+    return kwargs
 
 class LanguageServerClient:
     def __init__(self, user_agent='Antigravity/2.12.2'):
@@ -15,14 +28,51 @@ class LanguageServerClient:
         self.ssl_ctx.check_hostname = False
         self.ssl_ctx.verify_mode = ssl.CERT_NONE
 
+    def is_pid_alive(self, pid):
+        if not pid:
+            return False
+        if sys.platform == 'win32':
+            try:
+                h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+                if h:
+                    ctypes.windll.kernel32.CloseHandle(h)
+                    return True
+            except Exception:
+                pass
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+    def is_port_alive(self, port):
+        if not port:
+            return False
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.15)
+                return s.connect_ex(('127.0.0.1', port)) == 0
+        except Exception:
+            return False
+
     def get_connection(self, force_refresh=False):
         now = time.time()
-        if not force_refresh and (now - self.cache['last_checked'] < 5) and self.cache.get('port') and self.cache.get('csrf'):
-            return self.cache
+        # In-process validation: If we already have port and csrf, check liveness without spawning any subprocesses
+        if not force_refresh and self.cache.get('port') and self.cache.get('csrf'):
+            pid = self.cache.get('pid')
+            port = self.cache.get('port')
+            if (pid and self.is_pid_alive(pid)) or (port and self.is_port_alive(port)):
+                return self.cache
 
+        # Initial discovery or recovery: Launch completely hidden with CREATE_NO_WINDOW and SW_HIDE
         try:
             ps_cmd = "(Get-CimInstance Win32_Process -Filter \"name = 'language_server.exe'\") | ForEach-Object { [string]::Concat($_.ProcessId, '|', $_.CommandLine) }"
-            out = subprocess.check_output(['powershell', '-NoProfile', '-Command', ps_cmd], timeout=4).decode('utf-8', errors='ignore')
+            out = subprocess.check_output(
+                ['powershell', '-NoProfile', '-Command', ps_cmd],
+                timeout=4,
+                **silent_subprocess_kwargs()
+            ).decode('utf-8', errors='ignore')
         except Exception:
             self.cache.update({'pid': None, 'port': None, 'csrf': None, 'last_checked': now})
             return self.cache
@@ -47,7 +97,12 @@ class LanguageServerClient:
 
         if (not port or port == 0) and pid:
             try:
-                net_out = subprocess.check_output(f'netstat -ano | findstr {pid}', shell=True, timeout=3).decode('utf-8', errors='ignore')
+                net_out = subprocess.check_output(
+                    f'netstat -ano | findstr {pid}',
+                    shell=True,
+                    timeout=3,
+                    **silent_subprocess_kwargs()
+                ).decode('utf-8', errors='ignore')
                 for l in net_out.splitlines():
                     if 'LISTENING' in l:
                         parts = l.split()

@@ -7,6 +7,8 @@ if BASE_DIR not in sys.path:
 
 import json
 import time
+import ctypes
+from ctypes import wintypes
 import argparse
 import webbrowser
 import subprocess
@@ -24,16 +26,55 @@ client = LanguageServerClient()
 accounts = AccountManager()
 telemetry = TelemetryTracker(client)
 
+def silent_subprocess_kwargs():
+    kwargs = {}
+    if sys.platform == 'win32':
+        kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0  # SW_HIDE
+        kwargs['startupinfo'] = si
+    return kwargs
+
+class PROCESSENTRY32(ctypes.Structure):
+    _fields_ = [
+        ('dwSize', wintypes.DWORD),
+        ('cntUsage', wintypes.DWORD),
+        ('th32ProcessID', wintypes.DWORD),
+        ('th32DefaultHeapID', ctypes.c_void_p),
+        ('th32ModuleID', wintypes.DWORD),
+        ('cntThreads', wintypes.DWORD),
+        ('th32ParentProcessID', wintypes.DWORD),
+        ('pcPriClassBase', wintypes.LONG),
+        ('dwFlags', wintypes.DWORD),
+        ('szExeFile', ctypes.c_char * 260)
+    ]
+
 def is_ide_running():
+    if sys.platform != 'win32':
+        return False
     try:
-        out = subprocess.check_output('tasklist /FI "IMAGENAME eq Antigravity*" /NH', shell=True).decode('utf-8', errors='ignore')
-        return 'Antigravity' in out
+        kernel32 = ctypes.windll.kernel32
+        hSnapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+        if hSnapshot == -1:
+            return False
+        entry = PROCESSENTRY32()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+        success = kernel32.Process32First(hSnapshot, ctypes.byref(entry))
+        while success:
+            name = entry.szExeFile.decode('latin1', errors='ignore').lower()
+            if 'antigravity' in name:
+                kernel32.CloseHandle(hSnapshot)
+                return True
+            success = kernel32.Process32Next(hSnapshot, ctypes.byref(entry))
+        kernel32.CloseHandle(hSnapshot)
+        return False
     except Exception:
         return False
 
 def stop_ide():
     try:
-        subprocess.run('taskkill /F /IM Antigravity.exe /T', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run('taskkill /F /IM Antigravity.exe /T', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **silent_subprocess_kwargs())
         time.sleep(1.5)
         return True
     except Exception:
@@ -52,7 +93,7 @@ def start_ide():
     for exe in candidates:
         if os.path.exists(exe):
             try:
-                subprocess.Popen([exe], cwd=os.path.dirname(exe), shell=True)
+                subprocess.Popen([exe], cwd=os.path.dirname(exe), shell=True, **silent_subprocess_kwargs())
                 return True
             except Exception:
                 pass
@@ -215,7 +256,7 @@ class ApogeeHandler(SimpleHTTPRequestHandler):
             self.send_json(report)
         elif path == '/api/restart_ls':
             try:
-                subprocess.run('taskkill /F /IM language_server.exe', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run('taskkill /F /IM language_server.exe', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **silent_subprocess_kwargs())
                 time.sleep(1.5)
                 client.get_connection(force_refresh=True)
                 self.send_json({'success': True})
